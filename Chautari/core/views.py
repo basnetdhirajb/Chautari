@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.models import User, auth
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from .models import Profile, Post
+from .models import Profile, Post,LikePost, FollowersCount
 from django.http import HttpResponse
 
 # Create your views here.
@@ -109,5 +109,71 @@ def upload(request):
         new_post = Post.objects.create(user=user, image = image, caption = caption)
         new_post.save()
         return redirect('/')
+    else:
+        return redirect('/')
+
+@login_required(login_url='signin')
+def like_post(request):
+    username = request.user.username
+    post_id = request.GET.get('post_id')
+    
+    post = Post.objects.get(id=post_id)
+    
+    like_filter = LikePost.objects.filter(post_id=post_id, username = username).first()
+    
+    if like_filter is None:
+        new_like = LikePost.objects.create(post_id=post_id, username = username)
+        new_like.save()
+        post.likes+=1
+        post.save()
+        return redirect('/')
+    else:
+        like_filter.delete()
+        post.likes-=1
+        post.save()
+        return redirect('/')
+    
+@login_required(login_url='signin')
+def profile(request,pk):
+    user_object = User.objects.get(username=pk)
+    user_profile = Profile.objects.get(user = user_object)
+    user_posts = Post.objects.filter(user = user_object)
+    user_posts_length = len(user_posts)
+    follower = request.user.username
+    user = pk
+    if FollowersCount.objects.filter(follower = follower, user = user).first():
+        button_text = 'Unfollow'
+    else:
+        button_text = 'Follow'
+
+    follower_number = len(FollowersCount.objects.filter(user=pk)) #The followers of the profile thats being seen
+    user_following = len(FollowersCount.objects.filter(follower=pk)) #The numbers of followers the profile is following
+    
+    context = {
+        'user_object': user_object,
+        'user_profile':user_profile,
+        'posts': user_posts,
+        'posts_length': user_posts_length,
+        'button_text': button_text,
+        'followers' : follower_number,
+        'following' : user_following,
+    }
+    return render(request, 'profile.html',context )
+
+@login_required(login_url='signin')
+def follow(request):
+    if request.method == 'POST':
+        follower = request.POST['follower']
+        user = request.POST['user']
+        
+        follower_filter = FollowersCount.objects.filter(follower=follower, user = user).first()
+        
+        if follower_filter is not None:
+            follower_filter.delete()
+            return redirect('/profile/'+user)
+        else:
+            new_follow = FollowersCount.objects.create(follower=follower, user = user)
+            new_follow.save()
+            return redirect('/profile/'+user)
     else:
         return redirect('/')
